@@ -17,9 +17,9 @@ public class Engine {
 
 	private Document doc;
 	private String outputFolder;
-	private final Controller fxmlController;
-	
-	public Engine(String url, String outpuFolder, Controller ct) {
+	private Controller fxmlController;
+
+	public Engine(String url, String outpuFolder) {
 		try {
 			this.doc =  Jsoup.connect(url).get();
 			
@@ -28,25 +28,29 @@ public class Engine {
 			System.out.println(String.format("Error connection the URL: %s", url));
 			e.printStackTrace();
 		}
-		
-		this.fxmlController = ct;
 		this.outputFolder = outpuFolder;
-		
-		this.fxmlController.updateStatus(String.format("Connected to URL: %s", url));
 	}
 
+	public Controller getFxmlController() {
+		return fxmlController;
+	}
+
+	public void setFxmlController(Controller fxmlController) {
+		this.fxmlController = fxmlController;
+	}
+	
 	public void crawlWebsite() {
 		Element chapters = doc.getElementsByClass("chapter-list").first();
 		Elements rows = chapters.getElementsByClass("row");
 		int totalChapters = rows.size();
 		float growRate = (float) (1.0 / totalChapters);
-		int currentChapter = 1;
+		int currentChapter = 0;
 		for(Element row : rows) {
 			Element link = row.getElementsByAttribute("href").first();
 			String linkHref = link.attr("href");
 			String chapterName = link.attr("title");
 			processLinkToChapter(linkHref, chapterName);
-			this.fxmlController.updateProgressBar(++currentChapter * growRate);
+			if(this.fxmlController != null) this.fxmlController.updateProgressBar(++currentChapter * growRate);
 		}
 	}
 
@@ -84,10 +88,13 @@ public class Engine {
 		    //String newTitle = title.substring(0, indexOf);
 		    String outFilePath = folderPath + File.separator + pageNum + ".jpg";
 		    File outputImage = new File(outFilePath);
-		    if(outputImage.exists()) return;
+		    if(outputImage.exists()) {
+		    	if(this.fxmlController != null) this.fxmlController.updateStatus("Skiping image because it already exists: " + outFilePath);
+		    	return;
+		    }
 		    
 		    FileUtils.copyURLToFile(url, outputImage);
-		    this.fxmlController.updateStatus("File Copied: " + outFilePath);
+		    if(this.fxmlController != null) this.fxmlController.updateStatus("File Copied: " + outFilePath);
 		    
 		} catch (IOException e) {
 			System.out.println(String.format("Error getting the chapter image: %s", link));
@@ -106,7 +113,7 @@ public class Engine {
 		String folderName = this.outputFolder + File.separator + newChapterName.replaceAll("[<>:\"'\\/\\|?*]", "");
 		Path output = Paths.get(folderName);
 		if(!Files.exists(output)) {
-			this.fxmlController.updateStatus("Folder Created: " + folderName);
+			if(this.fxmlController != null) this.fxmlController.updateStatus("Folder Created: " + folderName);
 			Files.createDirectory(output);
 		}
 		

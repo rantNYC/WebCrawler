@@ -24,6 +24,7 @@ import javafx.scene.control.ListView;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextInputDialog;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.paint.Color;
 import javafx.stage.DirectoryChooser;
 
@@ -35,6 +36,7 @@ public class Controller {
 	private Task<Void> backgroundWorker;
 	private Model userModel;
 	private ModelBuilder modelBuilder;
+	private ObservableList<String> items;
 
     @FXML
     private Label urlPath;
@@ -46,7 +48,7 @@ public class Controller {
     private Label folderPath;
 
     @FXML
-    private Button stopButton;
+    private Button urlButton;
 
     @FXML
     private TextArea textLoggingArea;
@@ -61,6 +63,15 @@ public class Controller {
     private ListView<String> listURLVisited;
     
     @FXML
+    private Button startButton;
+
+    @FXML
+    private Button stopButton;
+    
+    @FXML
+    private Button startAllButton;
+    
+    @FXML
     public void initialize() {
     	try {
 			this.modelBuilder = new ModelBuilder();
@@ -71,7 +82,7 @@ public class Controller {
 		    	
 		    	ArrayList<String> visitedSites = getAllVisitedSites(this.userModel.getVisitedSites());
 		    	
-		    	ObservableList<String> items = FXCollections.observableArrayList(visitedSites);
+		    	items = FXCollections.observableArrayList(visitedSites);
 
 		    	this.listURLVisited.setItems(items);
 	    	}
@@ -80,17 +91,23 @@ public class Controller {
 		}
     }
     
-
 	@FXML
 	public void startButtonClicked() {
 		
-		backgroundWorker = createWorker();
+		this.startButton.setDisable(true);
+		this.startAllButton.setDisable(true);
+		
+		items.add(this.urlPath.getText());
+		
+		backgroundWorker = createSingleURLWorker();
 		
 		backgroundWorker.setOnSucceeded(new EventHandler<WorkerStateEvent>() {
 
 			@Override
 			public void handle(WorkerStateEvent arg0) {
 				saveUserPreferenceFromGUI();
+				startButton.setDisable(false);
+				startAllButton.setDisable(false);
 			}
 			
 		});
@@ -102,12 +119,49 @@ public class Controller {
 				saveUserPreferenceFromGUI();
 				updateProgressBar(0);
 		    	updateStatus("Stop requested by the user");
+		    	startButton.setDisable(false);
+		    	startAllButton.setDisable(false);
 			}
 		});
 		
         Thread backgrounThread = new Thread(backgroundWorker);
         backgrounThread.setDaemon(true);
         backgrounThread.start();
+	}
+	
+	public void StartAllButtonClicked() {
+		
+		this.startButton.setDisable(true);
+		this.startAllButton.setDisable(true);
+		backgroundWorker = createMultipleURLWorker();
+		
+		backgroundWorker.setOnSucceeded(new EventHandler<WorkerStateEvent>() {
+
+			@Override
+			public void handle(WorkerStateEvent arg0) {
+				saveUserPreferenceFromGUI();
+				startButton.setDisable(false);
+				startAllButton.setDisable(false);
+			}
+			
+		});
+		
+        backgroundWorker.setOnCancelled(new EventHandler<WorkerStateEvent>() {
+			
+			@Override
+			public void handle(WorkerStateEvent arg0) {
+				saveUserPreferenceFromGUI();
+				updateProgressBar(0);
+		    	updateStatus("Stop requested by the user");
+		    	startButton.setDisable(false);
+		    	startAllButton.setDisable(false);
+			}
+		});
+		
+        Thread backgrounThread = new Thread(backgroundWorker);
+        backgrounThread.setDaemon(true);
+        backgrounThread.start();
+		
 	}
 	
 	@FXML
@@ -139,9 +193,9 @@ public class Controller {
 		}
 	}
 	
-	public void updateProgressBar(double progress) {
+	public void updateProgressBar(final double progress) {
 		//TODO: Check why value is greater than 100 
-		if (Platform.isFxApplicationThread()) {
+		if (Platform.isFxApplicationThread()) {	
 			progressBar.setProgress(progress);
 			percentageLabel.setText(String.format("%.2f%%", progress*100));
 	    } else {
@@ -154,33 +208,28 @@ public class Controller {
 			});
 	    }
 	}
-	
-	private Task<Void> createWorker() {
-		Controller ct = this;
-		return new Task<Void>() {
-		      @Override
-		      protected Void call() throws Exception {
-		    	  
-		        updateStatus("Starting the search...");
-				
-				final long startTime = System.currentTimeMillis();
-				
-				progressBar.setProgress(0);
-				Engine site  = new Engine(urlPath.getText(), folderPath.getText(), ct);
 
-				site.crawlWebsite();
-				
-				final long endTime = System.currentTimeMillis();
-				
-				String formatedTime = formatTime((endTime - startTime)/1000);
-				updateStatus(String.format("Total execution time: %s .", formatedTime));
-				
-				updateStatus("Finsihing the search...");
-				
-		        return null;
-		      }
-		    };
+    @FXML
+    public void handleKeyPressed(KeyEvent event) {
+    	switch (event.getCode()) {
+    		case DELETE:
+    			deleteEntryFromList();
+    			break;
+    		case ENTER:
+    			enterEntryFromList();
+    		default:
+    			return;
+    	}
+    }
+	
+    public void updateStatus(String message) {
+	    if (Platform.isFxApplicationThread()) {
+	    	updateText(message);
+	    } else {
+	        Platform.runLater(() -> updateText(message));
+	    }
 	}
+		
 
 	@FXML
 	private void displayTextInputForURL() {
@@ -211,6 +260,7 @@ public class Controller {
 		
 		if(urlPath != null) {
 			try {
+				@SuppressWarnings("unused")
 				URL url = new URL(webPath);
 				urlPath.setText(webPath);
 			} catch (MalformedURLException ex) {
@@ -220,14 +270,6 @@ public class Controller {
 		}
 	}
 		
-	public void updateStatus(String message) {
-	    if (Platform.isFxApplicationThread()) {
-	    	updateText(message);
-	    } else {
-	        Platform.runLater(() -> updateText(message));
-	    }
-	}
-	
 	private void updateText(String output) {  
 		LocalDateTime now = LocalDateTime.now(); 
 		String outString = String.format("%tr: %s \n", now, output);
@@ -270,6 +312,64 @@ public class Controller {
 		return String.format("%d:%02d:%02d", hour, min, sec);
 	}
 
+	private Task<Void> createSingleURLWorker() {
+		Controller ct = this;
+		return new Task<Void>() {
+		      @Override
+		      protected Void call() throws Exception {
+		    	  
+		        updateStatus("Starting the search...");
+				
+				final long startTime = System.currentTimeMillis();
+				
+				progressBar.setProgress(0);
+				Engine site  = new Engine(urlPath.getText(), folderPath.getText());
+				site.setFxmlController(ct);
+
+				site.crawlWebsite();
+				
+				final long endTime = System.currentTimeMillis();
+				
+				String formatedTime = formatTime((endTime - startTime)/1000);
+				updateStatus(String.format("Total execution time: %s .", formatedTime));
+				
+				updateStatus("Finsihing the search...");
+				
+		        return null;
+		      }
+		    };
+	}
+
+	private Task<Void> createMultipleURLWorker() {
+		Controller ct = this;
+		return new Task<Void>() {
+		      @Override
+		      protected Void call() throws Exception {
+		    	  
+		        updateStatus("Starting the search for all visited URLs...");
+				
+				final long startTime = System.currentTimeMillis();
+				
+				progressBar.setProgress(0);
+				
+				for(String url: listURLVisited.getItems()) {
+					Engine site  = new Engine(url, folderPath.getText());
+					site.setFxmlController(ct);
+					site.crawlWebsite();
+				}
+				
+				final long endTime = System.currentTimeMillis();
+				
+				String formatedTime = formatTime((endTime - startTime)/1000);
+				updateStatus(String.format("Total execution time: %s .", formatedTime));
+				
+				updateStatus("Finsihing the search for all visited URLs...");
+				
+		        return null;
+		      }
+		    };
+	}
+	
 	private ArrayList<String> getAllVisitedSites(HashSet<String> visitedSites) {
 		// TODO Auto-generated method stub
 		ArrayList<String> result = new ArrayList<>();
@@ -279,4 +379,23 @@ public class Controller {
 		
 		return result;
 	}
+
+    private void deleteEntryFromList() {
+    	final int selectedIndex = listURLVisited.getSelectionModel().getSelectedIndex();
+		final String selectedString = listURLVisited.getSelectionModel().getSelectedItem();
+		if(selectedIndex != -1) {
+			//listURLVisited.getItems().remove(selectedIndex);
+			items.remove(selectedIndex);
+			userModel.getVisitedSites().remove(selectedString);
+		}
+		saveUserPreferenceFromGUI();
+    }
+    
+	private void enterEntryFromList() {
+		final String userSelection = this.listURLVisited.getSelectionModel().getSelectedItem();
+		if(userSelection != null) {
+			this.urlPath.setText(userSelection);
+		}
+	}
+    
 }

@@ -19,7 +19,7 @@ public class WebsiteGUI extends Application {
 		Parent root;
 		try {
 			root = (Parent)FXMLLoader.load(getClass().getResource("Main Window.fxml"));
-			primaryStage.setTitle("Manga Crawler");
+			primaryStage.setTitle("Website Crawler");
 			Scene scene = new Scene(root, SCREEN_WIDTH, SCREEN_HEIGHT);
 			
 	        primaryStage.setScene(scene);

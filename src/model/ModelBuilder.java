@@ -41,7 +41,7 @@ public class ModelBuilder {
 		return userModel;
 	}
 	
-	public void writeModelToJSON(Model userModel) throws IOException {
+	public void writeModelToJSON(final Model userModel) throws IOException {
 		GsonBuilder builder = new GsonBuilder(); 
 	    builder.setPrettyPrinting(); 
 		Gson jsonModel = builder.create();

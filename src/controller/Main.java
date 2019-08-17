@@ -10,7 +10,7 @@ public class Main {
 		
 		final long startTime = System.currentTimeMillis();
 
-		Engine site  = new Engine(webPage, outputFolder, null);
+		Engine site  = new Engine(webPage, outputFolder);
 		site.crawlWebsite();
 		
 		final long endTime = System.currentTimeMillis();
