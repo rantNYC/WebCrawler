@@ -51,7 +51,7 @@ public class Controller {
     private Button urlButton;
 
     @FXML
-    private TextArea textLoggingArea;
+    private TextArea textLoggingArea; //TODO:Add a queue to remove lines
 
     @FXML
     private Label percentageLabel;
