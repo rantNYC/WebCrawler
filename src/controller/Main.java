@@ -1,8 +1,10 @@
 package controller;
 
+import java.io.IOException;
+
 public class Main {
 
-	public static void main(String[] args) {
+	public static void main(String[] args) throws IOException {
 		// TODO: Make dynamic
 		final String webPage = "https://manganelo.com/manga/baki_dou";
 		final String outputFolder = "D:\\Downloads\\Manga\\Baki Dou";

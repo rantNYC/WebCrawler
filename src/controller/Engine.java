@@ -1,13 +1,17 @@
 package controller;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
-import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
-import org.apache.commons.io.FileUtils;
+import org.jsoup.Connection.Response;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -15,108 +19,142 @@ import org.jsoup.select.Elements;
 
 public class Engine {
 
+	public static final int CONNECTION_TIMEOUT = 30000;
+	
 	private Document doc;
+	private String urlDoc;
 	private String outputFolder;
-	private Controller fxmlController;
+//	private Controller fxmlController;
+	
+	private List<ChapterLink> chapterAndLink;
 
-	public Engine(String url, String outpuFolder) {
-		try {
-			this.doc =  Jsoup.connect(url).get();
-			
-		} catch (IOException e) {
-			// TODO: Debug
-			System.out.println(String.format("Error connection the URL: %s", url));
-			e.printStackTrace();
-		}
+//	private Map<String, List<String>> chapterToPages;
+
+	public Engine(String url, String outpuFolder) throws IOException {
+		this.urlDoc = url;
+		this.doc = Jsoup.connect(url).timeout(CONNECTION_TIMEOUT)
+				.userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36")
+				.get();
 		this.outputFolder = outpuFolder;
 	}
 
-	public Controller getFxmlController() {
-		return fxmlController;
+	public List<ChapterLink> getChapterToLink() {
+		return List.copyOf(chapterAndLink);
 	}
 
-	public void setFxmlController(Controller fxmlController) {
-		this.fxmlController = fxmlController;
-	}
-	
-	public void crawlWebsite() {
+//	public Controller getFxmlController() {
+//		return fxmlController;
+//	}
+
+//	public void setFxmlController(Controller fxmlController) {
+//		this.fxmlController = fxmlController;
+//	}
+
+	public void crawlWebsite() throws IOException {
+		chapterAndLink = new ArrayList<ChapterLink>();
 		Element chapters = doc.getElementsByClass("chapter-list").first();
+		if(chapters == null) throw new NullPointerException("Couldn't find chapters in the URL: " + urlDoc);
 		Elements rows = chapters.getElementsByClass("row");
-		int totalChapters = rows.size();
-		float growRate = (float) (1.0 / totalChapters);
-		int currentChapter = 0;
+//		int totalChapters = rows.size();
+//		float growRate = (float) (1.0 / totalChapters);
+//		int currentChapter = 0;
 		for(Element row : rows) {
 			Element link = row.getElementsByAttribute("href").first();
 			String linkHref = link.attr("href");
 			String chapterName = link.attr("title");
-			processLinkToChapter(linkHref, chapterName);
-			if(this.fxmlController != null) this.fxmlController.updateProgressBar(++currentChapter * growRate);
+			chapterAndLink.add(new ChapterLink(chapterName, linkHref));
+//			try {
+//				processLinkToChapter(linkHref, chapterName);
+//			}
+//			catch (Exception ex){
+//				this.fxmlController.updateStatus("Cannot download chapter: " + chapterName);
+//				this.fxmlController.updateStatus(ex);
+//			}
+//			if(this.fxmlController != null) this.fxmlController.updateProgressBar(++currentChapter * growRate);
 		}
 	}
 
-	private void processLinkToChapter(String linkHref, String chapterName) {
-		try {
-			Document chapterDoc = Jsoup.connect(linkHref).get();
-			
-			Element images = chapterDoc.getElementById("vungdoc");
-			
-			Elements imageLinks = images.getElementsByTag("img");
-			
-			int pageNum = 0;
-			
-			for(Element imageLink : imageLinks) {	
-				String link = imageLink.attr("src");
-				String title = imageLink.attr("title");
-				
-				saveImage(link, title, chapterName, ++pageNum);
-			}
-			
-		} catch (IOException e) {
-			System.out.println(String.format("Error connection the URL: %s", linkHref));
-			// TODO: Debug
-			e.printStackTrace();
+	public List<String> processChapterToPages(String linkHref, String chapterName) throws IOException {
+//		chapterToPages = new ConcurrentHashMap<String, List<String>>();
+		Document chapterDoc = Jsoup.connect(linkHref).timeout(CONNECTION_TIMEOUT).get();
+		Element images = chapterDoc.getElementById("vungdoc");
+		Elements imageLinks = images.getElementsByTag("img");
+
+		List<String> pagesToLink = new ArrayList<String>();
+		for(Element imageLink : imageLinks) {	
+			String link = imageLink.attr("src");
+//			String title = imageLink.attr("title");
+			pagesToLink.add(link);
+//			saveImage(link, title, chapterName, ++pageNum, linkHref);
 		}
-		
+
+		return pagesToLink;
 	}
 
-	private void saveImage(String link, String title, String chapterName, int pageNum) {
+	public void saveImage(String link, String chapterName, int pageNum, String referrer) throws IOException {
+
+		Response resultImageResponse = Jsoup.connect(link)
+										    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36")
+										    .referrer(referrer)
+										    .cookie("Cookie", "__cfduid=dad866def94d4f40df98e1a44c77d13251593818265")
+										    .ignoreContentType(true)
+										    .timeout(30000).execute();
+
+
+		String folderPath = createFolder(chapterName);
+		//int indexOf = title.lastIndexOf("-"); //Implies no title will have '-' besides the URL name
+		//String newTitle = title.substring(0, indexOf);
+		String outFilePath = folderPath + File.separator + pageNum + ".jpg";
+		File outputImage = new File(outFilePath);
+		if(outputImage.exists()) {
+//			if(this.fxmlController != null) this.fxmlController.updateStatus("Skiping image because it already exists: " + outFilePath);
+			return;
+		}
+
+		FileOutputStream out = null;
 		try {
-		    URL url = new URL(link);
-		    
-		    String folderPath = createFolder(chapterName);
-		    //int indexOf = title.lastIndexOf("-"); //Implies no title will have '-' besides the URL name
-		    //String newTitle = title.substring(0, indexOf);
-		    String outFilePath = folderPath + File.separator + pageNum + ".jpg";
-		    File outputImage = new File(outFilePath);
-		    if(outputImage.exists()) {
-		    	if(this.fxmlController != null) this.fxmlController.updateStatus("Skiping image because it already exists: " + outFilePath);
-		    	return;
-		    }
-		    
-		    FileUtils.copyURLToFile(url, outputImage);
-		    if(this.fxmlController != null) this.fxmlController.updateStatus("File Copied: " + outFilePath);
-		    
-		} catch (IOException e) {
-			System.out.println(String.format("Error getting the chapter image: %s", link));
-			// TODO: Debug
-			e.printStackTrace();
-		} catch (IllegalArgumentException e) {
-			System.out.println(String.format("Error getting the chapter image: %s", link));
-			// TODO: Debug
-			e.printStackTrace();
+		//output here
+		out = (new FileOutputStream(new File(outFilePath)));
+		out.write(resultImageResponse.bodyAsBytes());  // resultImageResponse.body() is where the image's contents are.
+		} finally {
+			if(out != null) out.close();
 		}
 		
+//		if(this.fxmlController != null) this.fxmlController.updateStatus("File Copied: " + outFilePath);
+
 	}
 
 	private String createFolder(String chapterName) throws IOException {
-		String newChapterName = chapterName.replaceAll("\\.\\.\\.", "");
+		String newChapterName = chapterName.replaceAll("\"[\\\\~#%&*{}/:<>?|\\\"-]\"", "");
 		String folderName = this.outputFolder + File.separator + newChapterName.replaceAll("[<>:\"'\\/\\|?*]", "");
 		Path output = Paths.get(folderName);
 		if(!Files.exists(output)) {
-			if(this.fxmlController != null) this.fxmlController.updateStatus("Folder Created: " + folderName);
-			Files.createDirectory(output);
+//			if(this.fxmlController != null) this.fxmlController.updateStatus("Folder Created: " + folderName);
+			Files.createDirectories(output);
 		}
-		
+
 		return folderName;
+	}
+	
+	public int getTotalChapters() {
+		return chapterAndLink == null ? 0 : chapterAndLink.size();
+	}
+	
+	public class ChapterLink{
+		private String chapterName;
+		private String chapterLink;
+		
+		public ChapterLink(String chapterName, String chapterLink) {
+			this.chapterName = chapterName;
+			this.chapterLink = chapterLink;
+		}
+
+		public String getChapterLink() {
+			return chapterLink;
+		}
+
+		public String getChapterName() {
+			return chapterName;
+		}
 	}
 }

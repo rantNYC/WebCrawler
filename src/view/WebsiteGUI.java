@@ -15,10 +15,8 @@ public class WebsiteGUI extends Application {
 	
 	@Override
 	public void start(Stage primaryStage) {
-		
-		Parent root;
 		try {
-			root = (Parent)FXMLLoader.load(getClass().getResource("Main Window.fxml"));
+			Parent root = (Parent)FXMLLoader.load(getClass().getResource("Main Window.fxml"));
 			primaryStage.setTitle("Website Crawler");
 			Scene scene = new Scene(root, SCREEN_WIDTH, SCREEN_HEIGHT);
 			
