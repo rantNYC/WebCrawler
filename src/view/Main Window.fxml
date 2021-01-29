@@ -6,6 +6,7 @@
 <?import javafx.scene.control.ListView?>
 <?import javafx.scene.control.ProgressBar?>
 <?import javafx.scene.control.SplitPane?>
+<?import javafx.scene.control.TextField?>
 <?import javafx.scene.effect.Reflection?>
 <?import javafx.scene.layout.AnchorPane?>
 <?import javafx.scene.layout.HBox?>
@@ -38,7 +39,11 @@
                                     <HBox prefHeight="100.0" prefWidth="635.0" spacing="10.0" VBox.vgrow="ALWAYS">
                                        <children>
                                           <Button id="urlButton" fx:id="urlButton" mnemonicParsing="false" onAction="#displayTextInputForURL" text="Select URL" />
-                                          <Label id="urlPath" fx:id="urlPath" text="..." />
+                                          <TextField id="urlPathText" fx:id="urlPathText" editable="false" promptText="Select URL to download" HBox.hgrow="ALWAYS">
+                                             <HBox.margin>
+                                                <Insets right="5.0" top="3.0" />
+                                             </HBox.margin>
+                                          </TextField>
                                        </children>
                                        <padding>
                                           <Insets left="10.0" top="5.0" />
@@ -47,7 +52,11 @@
                                     <HBox layoutX="10.0" layoutY="28.0" prefHeight="100.0" prefWidth="200.0" spacing="10.0" VBox.vgrow="ALWAYS">
                                        <children>
                                           <Button id="selectFolderButton" fx:id="selectFolderButton" mnemonicParsing="false" onAction="#searchOutputFolder" text="Select Folder" />
-                                          <Label id="folderPath" fx:id="folderPath" text="..." />
+                                          <TextField id="folderPathText" fx:id="folderPathText" editable="false" promptText="Select output folder" HBox.hgrow="ALWAYS">
+                                             <HBox.margin>
+                                                <Insets right="5.0" top="3.0" />
+                                             </HBox.margin>
+                                          </TextField>
                                        </children>
                                        <padding>
                                           <Insets left="10.0" />

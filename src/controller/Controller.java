@@ -7,10 +7,8 @@ import java.io.StringWriter;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -30,22 +28,21 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.ProgressBar;
-import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
-import javafx.scene.layout.Background;
-import javafx.scene.paint.Color;
 import javafx.stage.DirectoryChooser;
-
 import model.Model;
 import model.ModelBuilder;
 
 public class Controller {
 
+	private final String CONNECTION_STRING = "Connected to: ";
+	
 	private Thread backgrounThread;
 	private Model userModel;
 	private ModelBuilder modelBuilder;
@@ -55,13 +52,13 @@ public class Controller {
 	private String currentlyProcessing;
 
 	@FXML
-	private Label urlPath;
+	private TextField urlPathText;
 
 	@FXML
 	private Button selectFolderButton;
 
 	@FXML
-	private Label folderPath;
+	private TextField folderPathText;
 
 	@FXML
 	private Button urlButton;
@@ -94,10 +91,12 @@ public class Controller {
 	public void initialize() {
 		try {
 			this.modelBuilder = new ModelBuilder();
+//			this.urlPath = new TextField();
+//			this.folderPath = new TextField("AAAAAAA");
 			this.userModel = this.modelBuilder.readModelFromJSON();
 			if(this.userModel != null) {
-				this.urlPath.setText(this.userModel.getUrlPath());
-				this.folderPath.setText(this.userModel.getOutputFolder());
+				this.urlPathText.setText(this.userModel.getUrlPath());
+				this.folderPathText.setText(this.userModel.getOutputFolder());
 
 				Set<String> visitedSites = getAllVisitedSites(this.userModel.getVisitedSites());
 
@@ -121,7 +120,8 @@ public class Controller {
 
 	@FXML
 	public void startButtonClicked() {
-		startSingleCrawler(this.urlPath.getText());
+		logger.clear();
+		startSingleCrawler(this.urlPathText.getText());
 	}
 
 	private void startSingleCrawler(String website) {
@@ -129,7 +129,7 @@ public class Controller {
 		this.startAllButton.setDisable(true);
 		setCurrentlyProcessing(website);
 		items.add(getCurrentlyProcessing());
-		connectionTo.setText(connectionTo.getText() + getCurrentlyProcessing());
+		connectionTo.setText(CONNECTION_STRING + getCurrentlyProcessing());
 
 		backgrounThread = new Thread(createSingleURLWorker(getCurrentlyProcessing()));
 		backgrounThread.setDaemon(true);
@@ -155,19 +155,19 @@ public class Controller {
 
 		DirectoryChooser dc = new DirectoryChooser();
 
-		if(this.folderPath.getText() != "") {
-			dc.setInitialDirectory(new File(this.folderPath.getText()));
+		if(this.folderPathText.getText() != "") {
+			dc.setInitialDirectory(new File(this.folderPathText.getText()));
 		}
 
 		File selectedDirectory = dc.showDialog(null);
 
 		if(selectedDirectory != null) {
 			if(selectedDirectory.exists()) {
-				folderPath.setTextFill(Color.BLACK);
-				folderPath.setText(selectedDirectory.getAbsolutePath());
+//				folderPath.setTextFill(Color.BLACK);
+				folderPathText.setText(selectedDirectory.getAbsolutePath());
 			} else {
-				folderPath.setTextFill(Color.RED);
-				folderPath.setText("Please specify a valid path");
+//				folderPath.setTextFill(Color.RED);
+				folderPathText.setText("Please specify a valid path");
 			}
 		}
 	}
@@ -214,7 +214,7 @@ public class Controller {
 		if(event.getClickCount() == 2){
 			final String userSelecteion = this.listURLVisited.getSelectionModel().getSelectedItem();
 			if(!CrawlerUtilities.isNullOrEmpty(userSelecteion)) {
-				this.urlPath.setText(userSelecteion);
+				this.urlPathText.setText(userSelecteion);
 			}
 		}
 	}
@@ -230,7 +230,7 @@ public class Controller {
 	public void updateStatus(Throwable exception) {
 		StringWriter errors = new StringWriter();
 		exception.printStackTrace(new PrintWriter(errors));
-		String errorString = String.format("%s\n%s\n", exception.getMessage(), 
+		String errorString = String.format("Error Executing the search:\n%s\n%s", exception.getMessage(), 
 				errors.toString());
 		updateStatus(errorString);
 	}
@@ -249,8 +249,8 @@ public class Controller {
 	private void displayTextInputForURL() {
 
 		TextInputDialog dialog = new TextInputDialog("URL Input");
-		dialog.setHeaderText("Manga Website URL");
-		dialog.setContentText("Enter web URL for the manga:");
+		dialog.setHeaderText("Website URL");
+		dialog.setContentText("Enter web URL to download:");
 
 		Optional<String> result = dialog.showAndWait();
 		if (result.isPresent()){
@@ -265,21 +265,21 @@ public class Controller {
 		Alert alert = new Alert(AlertType.ERROR);
 		alert.setTitle("Malformed URL");
 		alert.setHeaderText("The URL is malformed and cannot connect");
-		alert.setContentText(String.format("URL: %s", urlPath.getText()));
+		alert.setContentText(String.format("URL: %s", urlPathText.getText()));
 
 		alert.showAndWait();
 	}
 
 	private void verifyURLPathExists(String webPath) {
 
-		if(urlPath != null) {
+		if(urlPathText != null) {
 			try {
 				@SuppressWarnings("unused")
 				URL url = new URL(webPath);
-				urlPath.setText(webPath);
+				urlPathText.setText(webPath);
 			} catch (MalformedURLException ex) {
 				displayPopUpError();
-				urlPath.setText("Input Manga URL");
+				urlPathText.setText("Input Manga URL");
 			}
 		}
 	}
@@ -308,7 +308,7 @@ public class Controller {
 			if(userModel != null) {
 				userSites = userModel.getVisitedSites();
 			}
-			userModel = new Model(urlPath.getText(), folderPath.getText());
+			userModel = new Model(urlPathText.getText(), folderPathText.getText());
 			userModel.setVisitedSites(userSites);
 			userModel.addSite();
 
@@ -319,7 +319,6 @@ public class Controller {
 	}
 
 	private Task<Void> createSingleURLWorker(String processURL) {
-		Controller ct = this;
 		Task<Void> bw =  new Task<Void>() {
 			@Override
 			protected Void call() throws Exception {
@@ -328,12 +327,12 @@ public class Controller {
 
 				final long startTime = System.currentTimeMillis();
 				try {
-					Engine site  = new Engine(processURL, folderPath.getText());
+					Engine site  = new Engine(processURL, folderPathText.getText());
 					//					site.setFxmlController(ct);
 					site.crawlWebsite();
 					updateStatus("Total Chapters: " + site.getTotalChapters());
 					for(ChapterLink entry : site.getChapterToLink()) {
-						
+
 						progressBar.setProgress(0);
 						int page = 0;
 						String chapterName = entry.getChapterName();
@@ -402,7 +401,6 @@ public class Controller {
 	}
 
 	private Set<String> getAllVisitedSites(HashSet<String> visitedSites) {
-		// TODO Auto-generated method stub
 		Set<String> result = new HashSet<String>();
 		for(String site : visitedSites) {
 			result.add(site);
@@ -424,11 +422,12 @@ public class Controller {
 	private void enterEntryFromList() {
 		final String userSelection = this.listURLVisited.getSelectionModel().getSelectedItem();
 		if(!CrawlerUtilities.isNullOrEmpty(userSelection)) {
-			this.urlPath.setText(userSelection);
+			this.urlPathText.setText(userSelection);
 		}
 	}
 
 	private void finishTask() {
+		connectionTo.setText(CONNECTION_STRING);
 		updateProgressBar(0);
 		startButton.setDisable(false);
 		startAllButton.setDisable(false);

@@ -6,7 +6,7 @@ public class Main {
 
 	public static void main(String[] args) throws IOException {
 		// TODO: Make dynamic
-		final String webPage = "https://manganelo.com/manga/baki_dou";
+		final String webPage = "https://manganelo.com/manga/read_one_punch_man_manga_online_free3";
 		final String outputFolder = "D:\\Downloads\\Manga\\Baki Dou";
 		
 		

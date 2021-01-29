@@ -16,7 +16,7 @@ import com.google.gson.GsonBuilder;
 public class ModelBuilder {
 	
 	//private final String filename = "user.json";
-	private final String defaultUserFile = "src/model/user.json";
+	private final String defaultUserFile = "user.json";
 	//private final InputStream userFile = this.getClass().getClassLoader().getResourceAsStream("user.json");
 	
 	public ModelBuilder() throws IOException {

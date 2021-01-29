@@ -8,9 +8,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
 import org.jsoup.Connection.Response;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -42,35 +39,16 @@ public class Engine {
 		return List.copyOf(chapterAndLink);
 	}
 
-//	public Controller getFxmlController() {
-//		return fxmlController;
-//	}
-
-//	public void setFxmlController(Controller fxmlController) {
-//		this.fxmlController = fxmlController;
-//	}
-
 	public void crawlWebsite() throws IOException {
 		chapterAndLink = new ArrayList<ChapterLink>();
 		Element chapters = doc.getElementsByClass("chapter-list").first();
 		if(chapters == null) throw new NullPointerException("Couldn't find chapters in the URL: " + urlDoc);
 		Elements rows = chapters.getElementsByClass("row");
-//		int totalChapters = rows.size();
-//		float growRate = (float) (1.0 / totalChapters);
-//		int currentChapter = 0;
 		for(Element row : rows) {
 			Element link = row.getElementsByAttribute("href").first();
 			String linkHref = link.attr("href");
 			String chapterName = link.attr("title");
 			chapterAndLink.add(new ChapterLink(chapterName, linkHref));
-//			try {
-//				processLinkToChapter(linkHref, chapterName);
-//			}
-//			catch (Exception ex){
-//				this.fxmlController.updateStatus("Cannot download chapter: " + chapterName);
-//				this.fxmlController.updateStatus(ex);
-//			}
-//			if(this.fxmlController != null) this.fxmlController.updateProgressBar(++currentChapter * growRate);
 		}
 	}
 
@@ -98,7 +76,7 @@ public class Engine {
 										    .referrer(referrer)
 										    .cookie("Cookie", "__cfduid=dad866def94d4f40df98e1a44c77d13251593818265")
 										    .ignoreContentType(true)
-										    .timeout(30000).execute();
+										    .timeout(CONNECTION_TIMEOUT).execute();
 
 
 		String folderPath = createFolder(chapterName);
