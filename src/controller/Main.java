@@ -6,13 +6,13 @@ public class Main {
 
 	public static void main(String[] args) throws IOException {
 		// TODO: Make dynamic
-		final String webPage = "https://manganelo.com/manga/read_one_punch_man_manga_online_free3";
-		final String outputFolder = "D:\\Downloads\\Manga\\Baki Dou";
+		final String webPage = "https://www.readm.org/manga/16103";
+		final String outputFolder = "D:\\MangaDownload\\One Punch Man";
 		
 		
 		final long startTime = System.currentTimeMillis();
 
-		Engine site  = new Engine(webPage, outputFolder);
+		WebCrawler site  = new WebCrawler(webPage, outputFolder);
 		site.crawlWebsite();
 		
 		final long endTime = System.currentTimeMillis();

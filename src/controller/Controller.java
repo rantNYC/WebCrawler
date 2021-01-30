@@ -8,11 +8,11 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.time.LocalDateTime;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Optional;
-import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
-import controller.Engine.ChapterLink;
 import controller.utilities.CrawlerUtilities;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -39,15 +39,20 @@ import javafx.stage.DirectoryChooser;
 import model.Model;
 import model.ModelBuilder;
 
-public class Controller {
+public class Controller implements IProcessListener {
 
 	private final String CONNECTION_STRING = "Connected to: ";
-	
-	private Thread backgrounThread;
+
 	private Model userModel;
 	private ModelBuilder modelBuilder;
 	private ObservableSet<String> items;
 	private ObservableList<String> logger;
+	private ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors(), 
+																	r -> {
+																		Thread t = new Thread(r);
+																		t.setDaemon(true);
+																		return t;
+																	});
 
 	private String currentlyProcessing;
 
@@ -64,7 +69,7 @@ public class Controller {
 	private Button urlButton;
 
 	@FXML
-	private ListView<String> textLoggingArea; 
+	private ListView<String> textLoggingArea;
 
 	@FXML
 	private Label percentageLabel;
@@ -91,18 +96,14 @@ public class Controller {
 	public void initialize() {
 		try {
 			this.modelBuilder = new ModelBuilder();
-//			this.urlPath = new TextField();
-//			this.folderPath = new TextField("AAAAAAA");
 			this.userModel = this.modelBuilder.readModelFromJSON();
-			if(this.userModel != null) {
+			this.logger = FXCollections.observableArrayList();
+			this.textLoggingArea.setItems(logger);
+			this.items = FXCollections.observableSet();
+			if (this.userModel != null) {
 				this.urlPathText.setText(this.userModel.getUrlPath());
 				this.folderPathText.setText(this.userModel.getOutputFolder());
-
-				Set<String> visitedSites = getAllVisitedSites(this.userModel.getVisitedSites());
-
-				items = FXCollections.observableSet(visitedSites);
-				logger = FXCollections.observableArrayList();
-				this.textLoggingArea.setItems(logger);
+				items.addAll(this.userModel.getVisitedSites());
 				this.listURLVisited.setItems(FXCollections.observableArrayList(items));
 			}
 		} catch (IOException e) {
@@ -124,29 +125,24 @@ public class Controller {
 		startSingleCrawler(this.urlPathText.getText());
 	}
 
-	private void startSingleCrawler(String website) {
-		this.startButton.setDisable(true);
-		this.startAllButton.setDisable(true);
-		setCurrentlyProcessing(website);
-		items.add(getCurrentlyProcessing());
-		connectionTo.setText(CONNECTION_STRING + getCurrentlyProcessing());
-
-		backgrounThread = new Thread(createSingleURLWorker(getCurrentlyProcessing()));
-		backgrounThread.setDaemon(true);
-		backgrounThread.start();
-	}
-
 	@FXML
 	public void startAllButtonClicked() {
-		for(String url: listURLVisited.getItems()) {
+		for (String url : listURLVisited.getItems()) {
 			startSingleCrawler(url);
 		}
-
 	}
 
 	@FXML
 	public void stopButtonClicked() {
-		backgrounThread.interrupt();
+		executor.shutdown();
+		try {
+			if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+				executor.shutdownNow();
+			}
+		} catch (InterruptedException e) {
+			executor.shutdownNow();
+		}
+		executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 		progressBar.setProgress(0);
 	}
 
@@ -155,35 +151,36 @@ public class Controller {
 
 		DirectoryChooser dc = new DirectoryChooser();
 
-		if(this.folderPathText.getText() != "") {
-			dc.setInitialDirectory(new File(this.folderPathText.getText()));
+		File possibleFile = new File(this.folderPathText.getText());
+		if (possibleFile.exists()) {
+			dc.setInitialDirectory(possibleFile);
+		} else {
+			dc.setInitialDirectory(new File(System.getProperty("user.dir")));
 		}
 
 		File selectedDirectory = dc.showDialog(null);
 
-		if(selectedDirectory != null) {
-			if(selectedDirectory.exists()) {
-//				folderPath.setTextFill(Color.BLACK);
+		if (selectedDirectory != null) {
+			if (selectedDirectory.exists()) {
 				folderPathText.setText(selectedDirectory.getAbsolutePath());
 			} else {
-//				folderPath.setTextFill(Color.RED);
 				folderPathText.setText("Please specify a valid path");
 			}
 		}
 	}
 
 	public void updateProgressBar(final double progress) {
-		//TODO: Check why value is greater than 100 
+		// TODO: Check why value is greater than 100
 		String progressToString;
-		if(progress <= 0) {
+		if (progress <= 0) {
 			progressToString = "0%";
 		} else if (progress >= 100) {
 			progressToString = "100%";
-		}else {
-			progressToString = String.format("%.2f%%", progress*100);
+		} else {
+			progressToString = String.format("%.2f%%", progress * 100);
 
 		}
-		if (Platform.isFxApplicationThread()) {	
+		if (Platform.isFxApplicationThread()) {
 			progressBar.setProgress(progress);
 			percentageLabel.setText(progressToString);
 		} else {
@@ -211,9 +208,9 @@ public class Controller {
 	}
 
 	public void handleClick(MouseEvent event) {
-		if(event.getClickCount() == 2){
+		if (event.getClickCount() == 2) {
 			final String userSelecteion = this.listURLVisited.getSelectionModel().getSelectedItem();
-			if(!CrawlerUtilities.isNullOrEmpty(userSelecteion)) {
+			if (!CrawlerUtilities.isNullOrEmpty(userSelecteion)) {
 				this.urlPathText.setText(userSelecteion);
 			}
 		}
@@ -230,13 +227,13 @@ public class Controller {
 	public void updateStatus(Throwable exception) {
 		StringWriter errors = new StringWriter();
 		exception.printStackTrace(new PrintWriter(errors));
-		String errorString = String.format("Error Executing the search:\n%s\n%s", exception.getMessage(), 
+		String errorString = String.format("Error Executing the search:\n%s\n%s", exception.getMessage(),
 				errors.toString());
 		updateStatus(errorString);
 	}
 
 	public void copyToClipboard(MouseEvent event) {
-		if(event.getButton() == MouseButton.SECONDARY) {
+		if (event.getButton() == MouseButton.SECONDARY) {
 			final Clipboard clipboard = Clipboard.getSystemClipboard();
 			final ClipboardContent content = new ClipboardContent();
 
@@ -245,6 +242,23 @@ public class Controller {
 		}
 	}
 
+	@Override
+	public void updateMessage(String msg) {
+		updateStatus(msg);
+	}
+
+	private void startSingleCrawler(String website) {
+		this.startButton.setDisable(true);
+		this.startAllButton.setDisable(true);
+		setCurrentlyProcessing(website);
+		items.add(getCurrentlyProcessing());
+		connectionTo.setText(CONNECTION_STRING + getCurrentlyProcessing());
+		
+		Thread backgrounThread = new Thread(createSingleURLWorker(getCurrentlyProcessing()));
+		backgrounThread.setDaemon(true);
+		executor.submit(backgrounThread);
+	}
+	
 	@FXML
 	private void displayTextInputForURL() {
 
@@ -253,7 +267,7 @@ public class Controller {
 		dialog.setContentText("Enter web URL to download:");
 
 		Optional<String> result = dialog.showAndWait();
-		if (result.isPresent()){
+		if (result.isPresent()) {
 			verifyURLPathExists(result.get());
 		}
 
@@ -272,7 +286,7 @@ public class Controller {
 
 	private void verifyURLPathExists(String webPath) {
 
-		if(urlPathText != null) {
+		if (urlPathText != null) {
 			try {
 				@SuppressWarnings("unused")
 				URL url = new URL(webPath);
@@ -284,115 +298,77 @@ public class Controller {
 		}
 	}
 
-	private void updateText(String output) {  
-		synchronized(logger) {
-			LocalDateTime now = LocalDateTime.now(); 
+	private void updateText(String output) {
+		synchronized (logger) {
+			LocalDateTime now = LocalDateTime.now();
 			String outString = String.format("%tr: %s \n", now, output);
-			if(logger.size() > 500) {
+			if (logger.size() > 500) {
 				int i = 0;
-				while(i < 50) {
+				while (i < 50) {
 					logger.remove(i);
 					++i;
 				}
 			}
 			logger.add(outString);
-			textLoggingArea.scrollTo(textLoggingArea.getItems().size()-1);
+			textLoggingArea.scrollTo(textLoggingArea.getItems().size() - 1);
 		}
 	}
 
 	private void saveUserPreferenceFromGUI() {
 		try {
-			if(modelBuilder == null) modelBuilder = new ModelBuilder();
+			if (modelBuilder == null)
+				modelBuilder = new ModelBuilder();
 
 			HashSet<String> userSites = new HashSet<String>();
-			if(userModel != null) {
+			if (userModel != null) {
 				userSites = userModel.getVisitedSites();
 			}
 			userModel = new Model(urlPathText.getText(), folderPathText.getText());
 			userModel.setVisitedSites(userSites);
 			userModel.addSite();
 
-			if(!userModel.isEmpty()) modelBuilder.writeModelToJSON(userModel);
+			if (!userModel.isEmpty())
+				modelBuilder.writeModelToJSON(userModel);
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
 	}
 
 	private Task<Void> createSingleURLWorker(String processURL) {
-		Task<Void> bw =  new Task<Void>() {
+		EngineTask bw = new EngineTask(processURL, folderPathText.getText());
+		bw.setListener(this);
+		bw.setOnRunning(new EventHandler<WorkerStateEvent>() {
+
 			@Override
-			protected Void call() throws Exception {
-
+			public void handle(WorkerStateEvent event) {
 				updateStatus("Starting the search...");
-
 				final long startTime = System.currentTimeMillis();
-				try {
-					Engine site  = new Engine(processURL, folderPathText.getText());
-					//					site.setFxmlController(ct);
-					site.crawlWebsite();
-					updateStatus("Total Chapters: " + site.getTotalChapters());
-					for(ChapterLink entry : site.getChapterToLink()) {
-
-						progressBar.setProgress(0);
-						int page = 0;
-						String chapterName = entry.getChapterName();
-						try {
-							List<String> pages = site.processChapterToPages(entry.getChapterLink(), chapterName);
-							int totalPages = pages.size();
-							float growRate = (float) (1.0 / totalPages);
-							updateStatus(String.format("Processing %s with total pages %d", chapterName, totalPages));
-
-							for(String image : pages) {
-								site.saveImage(image, chapterName, page+1, entry.getChapterLink());
-								updateProgressBar(++page * growRate);
-								if(backgrounThread.isInterrupted()) {
-									updateStatus("Stopping the search by user request");
-									return null;
-								}
-							}	
-						} catch (Exception ex) {
-							updateStatus("Error processing: " + chapterName);
-							updateStatus(ex);
-						}
-					}
-
-				} finally {
-					final long endTime = System.currentTimeMillis();
-					updateStatus("Finishing the search...");
-					String formatedTime = CrawlerUtilities.formatTime((endTime - startTime)/1000);
-					updateStatus(String.format("Total execution time: %s .", formatedTime));
-				}
-
-				return null;
+				bw.setStartTime(startTime);
 			}
-
-		};
-
+		});
 		bw.setOnSucceeded(new EventHandler<WorkerStateEvent>() {
 
 			@Override
 			public void handle(WorkerStateEvent arg0) {
-				finishTask();
+				finishTask(bw.getStartTime());
 				saveUserPreferenceFromGUI();
 			}
 
 		});
-
 		bw.setOnCancelled(new EventHandler<WorkerStateEvent>() {
 
 			@Override
 			public void handle(WorkerStateEvent arg0) {
-				finishTask();
+				finishTask(bw.getStartTime());
 				saveUserPreferenceFromGUI();
 			}
 
 		});
-
 		bw.setOnFailed(new EventHandler<WorkerStateEvent>() {
 
 			@Override
 			public void handle(WorkerStateEvent event) {
-				finishTask();
+				finishTask(bw.getStartTime());
 				updateStatus(event.getSource().getException());
 			}
 		});
@@ -400,19 +376,10 @@ public class Controller {
 		return bw;
 	}
 
-	private Set<String> getAllVisitedSites(HashSet<String> visitedSites) {
-		Set<String> result = new HashSet<String>();
-		for(String site : visitedSites) {
-			result.add(site);
-		}
-
-		return result;
-	}
-
 	private void deleteEntryFromList() {
 		final String selectedString = listURLVisited.getSelectionModel().getSelectedItem();
-		if(!CrawlerUtilities.isNullOrEmpty(selectedString)){
-			//listURLVisited.getItems().remove(selectedIndex);
+		if (!CrawlerUtilities.isNullOrEmpty(selectedString)) {
+			// listURLVisited.getItems().remove(selectedIndex);
 			items.remove(selectedString);
 			userModel.getVisitedSites().remove(selectedString);
 		}
@@ -421,12 +388,16 @@ public class Controller {
 
 	private void enterEntryFromList() {
 		final String userSelection = this.listURLVisited.getSelectionModel().getSelectedItem();
-		if(!CrawlerUtilities.isNullOrEmpty(userSelection)) {
+		if (!CrawlerUtilities.isNullOrEmpty(userSelection)) {
 			this.urlPathText.setText(userSelection);
 		}
 	}
 
-	private void finishTask() {
+	private void finishTask(long startTime) {
+		updateStatus("Finishing the search...");
+		final long endTime = System.currentTimeMillis();
+		String formatedTime = CrawlerUtilities.formatTime((endTime - startTime) / 1000);
+		updateStatus(String.format("Total execution time: %s .", formatedTime));
 		connectionTo.setText(CONNECTION_STRING);
 		updateProgressBar(0);
 		startButton.setDisable(false);
