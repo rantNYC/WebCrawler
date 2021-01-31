@@ -6,7 +6,11 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.jsoup.Connection;
@@ -18,6 +22,7 @@ import org.jsoup.select.Elements;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
 public class WebCrawler implements Runnable{
 
 	private static Logger log = LoggerFactory.getLogger(WebCrawler.class);
@@ -25,6 +30,8 @@ public class WebCrawler implements Runnable{
 
 	private final String url;
 	private final String outputDir;
+	
+	private WebCrawlerStats stats = new WebCrawlerStats();
 	
 	private Set<IProcessListener> listeners = new HashSet<>();
 	
@@ -46,7 +53,7 @@ public class WebCrawler implements Runnable{
 		} catch (IOException e) {
 			String errMsg = "Error processing website " + url;
 			log.error(errMsg, e);
-			updateListeners(errMsg);
+			updateListenersMessage(errMsg);
 		}
 	}
 	
@@ -63,39 +70,59 @@ public class WebCrawler implements Runnable{
 		
 		String title = doc.getElementsByTag("title").first().ownText();
 		String outputDirWithTitle = outputDir + File.separatorChar + title;
+		stats.setTotalNumChapters(chapters.size());
+		Map<String, List<String>> chapterByImgUrl = new LinkedHashMap<>();
 		for(Element chapter : chapters){
+			if(isInterrupted()) 
+				return;
 			Element link = chapter.getElementsByAttribute("href").first();
 			String linkHref = link.absUrl("href");
 			String chapterName = link.text();
-			processChapterToPages(linkHref, chapterName, outputDirWithTitle);
+			chapterByImgUrl.put(chapterName, processChapterToPages(linkHref, chapterName));
+		}
+		
+		for(Map.Entry<String, List<String>> entry : chapterByImgUrl.entrySet()) {
+			if(isInterrupted()) 
+				return;
+			String chptrName = entry.getKey();
+			List<String> imgs = entry.getValue();
+			int pageNum = 0;
+			String msg = String.format("Processing Chapter: %s", chptrName);
+			log.debug(msg);
+			updateListenersMessage(msg);
+			for(String img : imgs) {
+				if(isInterrupted()) 
+					return;
+				saveImage(img, chptrName, ++pageNum, outputDirWithTitle);
+				updateListenersProgress(stats.calculateProgress());
+			}
 		}
 	}
 
-	private void processChapterToPages(String linkHref, String chapterName, String outputDir) throws IOException {
-		
+	private List<String> processChapterToPages(String linkHref, String chapterName) throws IOException {
 		Document chapterDoc = getConnection(linkHref).get();
 		Elements images = chapterDoc.getElementsByClass("img-responsive scroll-down");
-		String msg = String.format("Processing Chapter: %s", chapterName);
-		log.debug(msg);
-		updateListeners(msg);
-		int pageNum=0;
+		List<String> imagesLink = new ArrayList<>();
+		stats.addNumImages(images.size());
 		for(Element image : images) {
 			String imgLink = image.absUrl("src");
-			saveImage(imgLink, chapterName, ++pageNum, linkHref, outputDir);
+			imagesLink.add(imgLink);
 		}
+		
+		return imagesLink;
 	}
 
-	private void saveImage(String link, String chapterName, int pageNum, String referrer, String outputDir) throws IOException {
+	private void saveImage(String link, String chapterName, int pageNum, String outputDir) throws IOException {
 		String msg = String.format("Processing image number %d", pageNum);
 		log.debug(msg);
-		updateListeners(msg);
+		updateListenersMessage(msg);
 		String folderPath = createFolder(outputDir, chapterName);
 		String outFilePath = folderPath + File.separator + pageNum + ".jpg";
 		File outputImage = new File(outFilePath);
 		if(outputImage.exists()) {
 			msg = String.format("Ouput image %s already exists, skipping...", outputImage);
 			log.warn(msg);
-			updateListeners(msg);
+			updateListenersMessage(msg);
 			return;
 		}
 
@@ -106,7 +133,7 @@ public class WebCrawler implements Runnable{
 		} catch (Exception e) {
 			msg = String.format("Error processing page %d with url %s", pageNum, link);
 			log.error(msg, e);
-			updateListeners(msg);
+			updateListenersMessage(msg);
 		}
 	}
 
@@ -128,9 +155,41 @@ public class WebCrawler implements Runnable{
 	    .timeout(CONNECTION_TIMEOUT);
 	}
 	
-	private void updateListeners(String msg) {
+	private void updateListenersMessage(String msg) {
 		for(IProcessListener listener : listeners) {
 			listener.updateMessage(msg);
+		}
+	}
+	
+	private void updateListenersProgress(double progress) {
+		for(IProcessListener listener : listeners) {
+			listener.updateProgess(progress);
+		}
+	}
+	
+	private boolean isInterrupted() {
+		return Thread.currentThread().isInterrupted();
+	}
+	
+	private class WebCrawlerStats{
+		private int totalNumChapters = 0;
+		private int totalNumImages = 0;
+		private int iteration = 0;
+		
+		public WebCrawlerStats() {}
+
+		public void setTotalNumChapters(int totalNumChapters) {
+			this.totalNumChapters = totalNumChapters;
+		}
+
+		public void addNumImages(int totalNumImages) {
+			this.totalNumImages += totalNumImages;
+		}
+
+		public double calculateProgress() {
+			if(totalNumChapters == 0 || totalNumImages == 0) return 0;
+			
+			return ++iteration/(double)(totalNumChapters * totalNumImages);
 		}
 	}
 }

@@ -134,16 +134,16 @@ public class Controller implements IProcessListener {
 
 	@FXML
 	public void stopButtonClicked() {
-		executor.shutdown();
+		executor.shutdownNow();
 		try {
-			if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+			if (!executor.awaitTermination(1, TimeUnit.SECONDS)) {
 				executor.shutdownNow();
 			}
 		} catch (InterruptedException e) {
 			executor.shutdownNow();
 		}
+		updateMessage("Stopped task...");
 		executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-		progressBar.setProgress(0);
 	}
 
 	@FXML
@@ -166,31 +166,6 @@ public class Controller implements IProcessListener {
 			} else {
 				folderPathText.setText("Please specify a valid path");
 			}
-		}
-	}
-
-	public void updateProgressBar(final double progress) {
-		// TODO: Check why value is greater than 100
-		String progressToString;
-		if (progress <= 0) {
-			progressToString = "0%";
-		} else if (progress >= 100) {
-			progressToString = "100%";
-		} else {
-			progressToString = String.format("%.2f%%", progress * 100);
-
-		}
-		if (Platform.isFxApplicationThread()) {
-			progressBar.setProgress(progress);
-			percentageLabel.setText(progressToString);
-		} else {
-			Platform.runLater(new Runnable() {
-				@Override
-				public void run() {
-					progressBar.setProgress(progress);
-					percentageLabel.setText(progressToString);
-				}
-			});
 		}
 	}
 
@@ -247,9 +222,39 @@ public class Controller implements IProcessListener {
 		updateStatus(msg);
 	}
 
+	@Override
+	public void updateProgess(double progress) {
+		updateProgressBar(progress);
+	}
+	
+	private void updateProgressBar(final double progress) {
+		double toUseProgress;
+		if (progress < 0) {
+			toUseProgress = 0;
+		} else if (progress > 1) {
+			toUseProgress = 1;
+		} else {
+			toUseProgress = progress;
+		}
+		
+		if (Platform.isFxApplicationThread()) {
+			progressBar.setProgress(toUseProgress);
+			percentageLabel.setText(String.format("%.2f%%", progressBar.getProgress()*100));
+		} else {
+			Platform.runLater(new Runnable() {
+				@Override
+				public void run() {
+					progressBar.setProgress(toUseProgress);
+					percentageLabel.setText(String.format("%.2f%%", progressBar.getProgress()*100));
+				}
+			});
+		}
+	}
+	
 	private void startSingleCrawler(String website) {
 		this.startButton.setDisable(true);
 		this.startAllButton.setDisable(true);
+		updateProgressBar(0);
 		setCurrentlyProcessing(website);
 		items.add(getCurrentlyProcessing());
 		connectionTo.setText(CONNECTION_STRING + getCurrentlyProcessing());
@@ -399,7 +404,7 @@ public class Controller implements IProcessListener {
 		String formatedTime = CrawlerUtilities.formatTime((endTime - startTime) / 1000);
 		updateStatus(String.format("Total execution time: %s .", formatedTime));
 		connectionTo.setText(CONNECTION_STRING);
-		updateProgressBar(0);
+		updateProgressBar(100);
 		startButton.setDisable(false);
 		startAllButton.setDisable(false);
 	}
